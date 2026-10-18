@@ -6,11 +6,12 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.RemoteViews
 import kotlin.concurrent.thread
 
 /**
- * Home screen widget: brightness presets, display on/off, next app and a
+ * Home screen widget: brightness presets, the web settings page, display on/off, next app and a
  * shortcut to one app (default: departures). Each tap sends one API call,
  * then reads the status back into the widget.
  */
@@ -82,9 +83,17 @@ class TidbytWidget : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget)
             views.setTextViewText(R.id.status, statusText)
             views.setTextViewText(R.id.show, TidbytApi.showApp(context).replaceFirstChar { it.uppercase() })
-            listOf(R.id.b10 to 10, R.id.b25 to 25, R.id.b50 to 50, R.id.b100 to 100).forEach { (id, pct) ->
+            listOf(R.id.b2 to 2, R.id.b30 to 30, R.id.b100 to 100).forEach { (id, pct) ->
                 views.setOnClickPendingIntent(id, broadcast(context, ACTION_BRIGHTNESS + pct))
             }
+            views.setOnClickPendingIntent(
+                R.id.web,
+                PendingIntent.getActivity(
+                    context, 1,
+                    Intent(Intent.ACTION_VIEW, Uri.parse("http://${TidbytApi.host(context)}/")),
+                    PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
             views.setOnClickPendingIntent(R.id.power, broadcast(context, ACTION_POWER))
             views.setOnClickPendingIntent(R.id.next, broadcast(context, ACTION_NEXT))
             views.setOnClickPendingIntent(R.id.show, broadcast(context, ACTION_SHOW))
