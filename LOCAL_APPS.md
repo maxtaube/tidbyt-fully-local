@@ -12,8 +12,28 @@ built-in apps; any other URL keeps the normal Tronbyt server behaviour.
 | `spotify` | Spotify Web API | needs a one-time login, skipped while nothing plays |
 | `message` | config | static `title`/`text`/`color` |
 
-Notifications (`POST /api/notify`) interrupt the rotation. Touch: tap = next
-app, hold = display on/off (if touch is enabled).
+Notifications (`POST /api/notify`) interrupt the rotation.
+
+## Display and button
+
+Set on the settings page (or in the config JSON):
+
+```json
+"brightness":  {"day": 60, "night": 10, "night_start": "22:00", "night_end": "07:00"},
+"display_off": {"enabled": true, "start": "00:00", "end": "06:00", "wake_minutes": 5},
+"button":      {"enabled": true, "tap": "next", "double_tap": "none", "hold": "display"}
+```
+
+- **Brightness** follows the day/night times. Whole hours (`22`) still work.
+- **Display off** blanks the screen and stops all apps (no data fetching) in
+  that window. A button press wakes it for `wake_minutes`.
+- **Button** (Gen 2 touch bar) actions: `none`, `next`, `display` (on/off),
+  `brightness` (10 → 25 → 50 → 75 → 100 %, until the next day/night switch) and
+  `show:<app>` (jump to that app, e.g. `show:departures`). While the display is
+  off, any gesture with an action turns it on. Turning it off with the button
+  lasts until the end of the next display-off window (or until pressed again).
+  Single taps react immediately unless a double tap action is set. The button
+  is off by default on Gen 2 (spurious touches), so enable it here.
 
 ## Settings page and API (port 8080)
 
@@ -21,12 +41,15 @@ Open `http://<device-ip>:8080/` for the settings page. The same JSON API is
 meant for the Android app:
 
 ```
-GET  /api/status            firmware, mode, IP, current app
+GET  /api/status            firmware, mode, IP, current app, display state
 GET  /api/apps              built-in app names
 GET  /api/config            {"timezone", "brightness", "rotation": [...]}
 PUT  /api/config            replace (validated, stored in NVS)
 POST /api/notify            {"text", "title", "color", "secs"}
 POST /api/next
+POST /api/display         {"on": true|false}
+POST /api/brightness      {"value": 0-100}   until the next day/night switch
+POST /api/show            {"app": "departures"}
 POST /api/spotify           {"client_id", "refresh_token"}   DELETE to clear
 POST /api/mode              {"image_url": "local" | "http://..."}  (reboots)
 POST /api/ota               raw firmware.bin                 (reboots)

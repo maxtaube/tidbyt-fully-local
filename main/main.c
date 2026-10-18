@@ -611,8 +611,9 @@ void app_main(void) {
   esp_register_shutdown_handler(&display_shutdown);
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
-  // Initialize touch controls (GPIO33 on Tidbyt Gen2)
-  if (!nvs_get_disable_touch()) {
+  // Initialize touch controls (GPIO33 on Tidbyt Gen2). In local mode the
+  // apps config switches the button on and off instead of NVS.
+  if (!nvs_get_disable_touch() || apps_local_mode(nvs_get_image_url())) {
     ESP_LOGI(TAG, "Initializing touch control...");
     esp_err_t touch_ret = touch_control_init();
     if (touch_ret == ESP_OK) {
@@ -753,16 +754,17 @@ void app_main(void) {
     for (;;) {
       wifi_health_check();
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
-      if (nvs_get_disable_touch()) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
-      } else {
-        for (int i = 0; i < 100; i++) {
+      // Poll for ~5 s between WiFi checks; the button can be switched on
+      // and off in the settings at any time.
+      for (int i = 0; i < 100; i++) {
+        if (apps_button_enabled()) {
+          touch_control_set_double_tap(apps_button_double_tap());
           touch_event_t touch_event = touch_control_check();
-          if (touch_event != TOUCH_EVENT_NONE) {
-            handle_touch_event(touch_event);
-          }
-          vTaskDelay(pdMS_TO_TICKS(50));
+          if (touch_event == TOUCH_EVENT_TAP) apps_button("tap");
+          if (touch_event == TOUCH_EVENT_DOUBLE_TAP) apps_button("double_tap");
+          if (touch_event == TOUCH_EVENT_HOLD) apps_button("hold");
         }
+        vTaskDelay(pdMS_TO_TICKS(50));
       }
 #else
       vTaskDelay(pdMS_TO_TICKS(5000));
@@ -1091,7 +1093,6 @@ static void handle_touch_event(touch_event_t event) {
 
     case TOUCH_EVENT_HOLD:
       display_power_on = !display_power_on;
-      apps_set_display_power(display_power_on);
 
       if (display_power_on) {
         ESP_LOGI(TAG, "HOLD - Display ON");

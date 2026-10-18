@@ -5,7 +5,9 @@
 //
 // {
 //   "timezone": "CET-1CEST,M3.5.0,M10.5.0/3",          POSIX TZ string
-//   "brightness": {"day": 60, "night": 10, "night_start": 22, "night_end": 7},
+//   "brightness": {"day": 60, "night": 10, "night_start": "22:00", "night_end": "07:00"},
+//   "display_off": {"enabled": true, "start": "00:00", "end": "06:00", "wake_minutes": 5},
+//   "button": {"enabled": true, "tap": "next", "double_tap": "none", "hold": "display"},
 //   "rotation": [
 //     {"app": "clock", "dwell": 10, "enabled": true, "config": {"24h": true}},
 //     ...
@@ -36,8 +38,23 @@ esp_err_t apps_notify(const char *title, const char *text, const char *color,
                       int secs);
 // Skip to the next app.
 void apps_next(void);
-// Display on/off from the touch HOLD gesture.
-void apps_set_display_power(bool on);
+// Button (Gen 2 touch bar), polled by the main task in local mode.
+bool apps_button_enabled(void);
+// True if a double tap has an action (single taps then wait for the window).
+bool apps_button_double_tap(void);
+// Run the action configured for "tap", "double_tap" or "hold".
+void apps_button(const char *gesture);
+// "on", "on (woken)", "off" or "off (schedule)".
+const char *apps_display_state(void);
+// Display on/off, like the button's "display" action (on wakes it during the
+// display_off window for wake_minutes).
+void apps_set_display(bool on);
+// Brightness 0-100 until the next day/night switch.
+void apps_set_brightness(int pct);
+// Brightness currently sent to the display (0 when off).
+int apps_brightness(void);
+// Show the first enabled rotation item running `app` next.
+esp_err_t apps_show(const char *app);
 // Name of the app currently on screen ("" if none).
 const char *apps_current(void);
 // List of built-in app names, as a JSON array (caller frees).

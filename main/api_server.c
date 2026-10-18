@@ -98,6 +98,8 @@ static esp_err_t status_handler(httpd_req_t *req) {
   cJSON_AddStringToObject(o, "mode", apps_local_mode(image_url) ? "local" : "remote");
   cJSON_AddStringToObject(o, "image_url", image_url ? image_url : "");
   cJSON_AddStringToObject(o, "current_app", apps_current());
+  cJSON_AddStringToObject(o, "display", apps_display_state());
+  cJSON_AddNumberToObject(o, "brightness", apps_brightness());
   cJSON_AddNumberToObject(o, "uptime_s", esp_timer_get_time() / 1000000);
   cJSON_AddNumberToObject(o, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(o, "free_internal", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
@@ -170,6 +172,39 @@ static esp_err_t notify_handler(httpd_req_t *req) {
 static esp_err_t next_handler(httpd_req_t *req) {
   apps_next();
   return send_ok(req);
+}
+
+// {"on": true|false}
+static esp_err_t display_handler(httpd_req_t *req) {
+  cJSON *root = read_json(req);
+  const cJSON *on = cJSON_GetObjectItem(root, "on");
+  if (!cJSON_IsBool(on)) {
+    cJSON_Delete(root);
+    return send_error(req, "400 Bad Request", "expected {\"on\": true|false}");
+  }
+  apps_set_display(cJSON_IsTrue(on));
+  cJSON_Delete(root);
+  return send_ok(req);
+}
+
+// {"value": 0-100}; lasts until the next day/night switch.
+static esp_err_t brightness_handler(httpd_req_t *req) {
+  cJSON *root = read_json(req);
+  const cJSON *v = cJSON_GetObjectItem(root, "value");
+  bool ok = cJSON_IsNumber(v) && v->valueint >= 0 && v->valueint <= 100;
+  if (ok) apps_set_brightness(v->valueint);
+  cJSON_Delete(root);
+  return ok ? send_ok(req) : send_error(req, "400 Bad Request", "expected {\"value\": 0-100}");
+}
+
+// {"app": "departures"}
+static esp_err_t show_handler(httpd_req_t *req) {
+  cJSON *root = read_json(req);
+  const cJSON *app = cJSON_GetObjectItem(root, "app");
+  esp_err_t err = cJSON_IsString(app) ? apps_show(app->valuestring) : ESP_ERR_INVALID_ARG;
+  cJSON_Delete(root);
+  return err == ESP_OK ? send_ok(req)
+                       : send_error(req, "400 Bad Request", "unknown or disabled app");
 }
 
 static esp_err_t spotify_post_handler(httpd_req_t *req) {
@@ -296,6 +331,9 @@ esp_err_t api_server_start(void) {
       {"/api/config", HTTP_PUT, config_put_handler, NULL},
       {"/api/notify", HTTP_POST, notify_handler, NULL},
       {"/api/next", HTTP_POST, next_handler, NULL},
+      {"/api/display", HTTP_POST, display_handler, NULL},
+      {"/api/brightness", HTTP_POST, brightness_handler, NULL},
+      {"/api/show", HTTP_POST, show_handler, NULL},
       {"/api/spotify", HTTP_POST, spotify_post_handler, NULL},
       {"/api/spotify", HTTP_DELETE, spotify_delete_handler, NULL},
       {"/api/mode", HTTP_POST, mode_handler, NULL},

@@ -46,6 +46,9 @@ touch_event_t touch_control_check(void);
 void touch_control_set_threshold(uint16_t threshold);
 uint16_t touch_control_get_threshold(void);
 void touch_control_set_debounce(uint32_t ms);
+// Detect double taps. Off: single taps are reported on release, without the
+// double-tap window delay. Defaults to CONFIG_TOUCH_DOUBLE_TAP.
+void touch_control_set_double_tap(bool enabled);
 void touch_control_calibrate(void);
 void touch_control_debug_all_pads(void);
 uint16_t touch_control_read_raw(touch_pad_t pad);

@@ -50,6 +50,7 @@ typedef struct {
   uint32_t release_time;
   uint32_t last_event_time;
   bool is_late_tap;  // True if current touch was too late for double-tap (will be swallowed)
+  bool double_tap;   // Wait for a second tap (delays single taps by the window)
 } touch_state_t;
 
 static touch_state_t g_touch = {.threshold = TOUCH_THRESHOLD_DEFAULT,
@@ -63,7 +64,13 @@ static touch_state_t g_touch = {.threshold = TOUCH_THRESHOLD_DEFAULT,
                                 .touch_start_time = 0,
                                 .release_time = 0,
                                 .last_event_time = 0,
-                                .is_late_tap = false};
+                                .is_late_tap = false,
+#ifdef CONFIG_TOUCH_DOUBLE_TAP
+                                .double_tap = true
+#else
+                                .double_tap = false
+#endif
+};
 
 static void touch_feedback(beep_kind_t kind) {
   if (nvs_get_touch_beep()) {
@@ -115,12 +122,8 @@ esp_err_t touch_control_init(void) {
   g_touch.state = STATE_IDLE;
   g_touch.init_time = get_time_ms();
 
-  ESP_LOGI(TAG, "Touch control ready (GPIO33)");
-#ifdef CONFIG_TOUCH_DOUBLE_TAP
-  ESP_LOGI(TAG, "  TAP = Next app | DOUBLE-TAP = (unassigned) | HOLD 2s = Toggle display");
-#else
-  ESP_LOGI(TAG, "  TAP = Next app | HOLD 2s = Toggle display");
-#endif
+  ESP_LOGI(TAG, "Touch control ready (GPIO33), double tap %s",
+           g_touch.double_tap ? "on" : "off");
 
   return ESP_OK;
 }
@@ -175,17 +178,17 @@ touch_event_t touch_control_check(void) {
         } else if (g_touch.is_late_tap) {
           g_touch.state = STATE_IDLE;
         } else if (duration >= MIN_TAP_DURATION_MS) {
-#ifdef CONFIG_TOUCH_DOUBLE_TAP
-          g_touch.release_time = now;
-          g_touch.state = STATE_WAIT_FOR_DOUBLE_TAP;
-#else
-          // No second tap to wait for: report the tap as soon as it ends
-          g_touch.state = STATE_IDLE;
-          if (now - g_touch.last_event_time >= g_touch.debounce_ms) {
-            event = TOUCH_EVENT_TAP;
-            g_touch.last_event_time = now;
+          if (g_touch.double_tap) {
+            g_touch.release_time = now;
+            g_touch.state = STATE_WAIT_FOR_DOUBLE_TAP;
+          } else {
+            // No second tap to wait for: report the tap as soon as it ends
+            g_touch.state = STATE_IDLE;
+            if (now - g_touch.last_event_time >= g_touch.debounce_ms) {
+              event = TOUCH_EVENT_TAP;
+              g_touch.last_event_time = now;
+            }
           }
-#endif
         } else {
           g_touch.state = STATE_IDLE;
         }
@@ -230,6 +233,14 @@ touch_event_t touch_control_check(void) {
   }
 
   return event;
+}
+
+void touch_control_set_double_tap(bool enabled) {
+  if (g_touch.double_tap == enabled) return;
+  g_touch.double_tap = enabled;
+  if (!enabled && g_touch.state == STATE_WAIT_FOR_DOUBLE_TAP) {
+    g_touch.state = STATE_IDLE;
+  }
 }
 
 void touch_control_calibrate(void) {

@@ -24,3 +24,9 @@ build-apps/
 build-gen2/
 build-apps.log
 test/host/out/
+
+# Android widget build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

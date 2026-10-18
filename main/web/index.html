@@ -56,15 +56,36 @@
   </section>
 
   <section>
-    <h2>General</h2>
+    <h2>Display</h2>
     <div class="row small">
-      Brightness day <input id="b-day" type="number" min="0" max="100" style="width:64px">
-      night <input id="b-night" type="number" min="0" max="100" style="width:64px">
-      from <input id="b-start" type="number" min="0" max="23" style="width:56px">
-      to <input id="b-end" type="number" min="0" max="23" style="width:56px"> h
+      Brightness day <input id="b-day" type="number" min="0" max="100" style="width:64px"> %
+      night <input id="b-night" type="number" min="0" max="100" style="width:64px"> %
+    </div>
+    <div class="row small" style="margin-top:8px">
+      Night from <input id="b-start" type="time"> to <input id="b-end" type="time">
+    </div>
+    <div class="row small" style="margin-top:8px">
+      <label><input id="off-on" type="checkbox"> Turn off</label>
+      from <input id="off-start" type="time"> to <input id="off-end" type="time">
+    </div>
+    <div class="row small" style="margin-top:8px">
+      A button press wakes it for <input id="off-wake" type="number" min="1" max="240" style="width:64px"> min
     </div>
     <div class="row small" style="margin-top:8px">Timezone (POSIX) <input id="tz" class="grow"></div>
     <div class="row" style="margin-top:10px"><span class="grow"></span><button class="primary" onclick="save()">Save</button></div>
+  </section>
+
+  <section>
+    <h2>Button</h2>
+    <p class="muted small">The touch bar on top (Gen 2). While the display is off, any gesture with an action turns it back on.</p>
+    <div class="row small"><label><input id="btn-on" type="checkbox"> Enabled</label></div>
+    <div class="row small" style="margin-top:8px">
+      Tap <select id="btn-tap"></select>
+      Double tap <select id="btn-double"></select>
+      Hold 2 s <select id="btn-hold"></select>
+    </div>
+    <p class="muted small">With a double tap action, single taps react half a second later.</p>
+    <div class="row"><span class="grow"></span><button class="primary" onclick="save()">Save</button></div>
   </section>
 
   <section>
@@ -127,7 +148,8 @@ async function load() {
   const [status, apps, config] = await Promise.all([req('GET', '/api/status'), req('GET', '/api/apps'), req('GET', '/api/config')]);
   cfg = config;
   $('status').innerHTML = [
-    ['Mode', status.mode], ['Showing', status.current_app || '-'], ['Firmware', status.firmware],
+    ['Mode', status.mode], ['Showing', status.current_app || '-'], ['Display', status.display || '-'],
+    ['Firmware', status.firmware],
     ['Network', `${status.ssid || '-'} (${status.rssi || '?'} dBm), ${status.ip || ''}`],
     ['Spotify', status.spotify_configured ? 'connected' : 'not connected'],
     ['Uptime', `${Math.round(status.uptime_s / 60)} min`],
@@ -136,9 +158,27 @@ async function load() {
   $('add-app').innerHTML = apps.map(a => `<option>${a}</option>`).join('');
   const b = cfg.brightness || {};
   $('b-day').value = b.day ?? 60; $('b-night').value = b.night ?? 10;
-  $('b-start').value = b.night_start ?? 22; $('b-end').value = b.night_end ?? 7;
+  $('b-start').value = hhmm(b.night_start, '22:00'); $('b-end').value = hhmm(b.night_end, '07:00');
+  const off = cfg.display_off || {};
+  $('off-on').checked = !!off.enabled;
+  $('off-start').value = hhmm(off.start, '00:00'); $('off-end').value = hhmm(off.end, '06:00');
+  $('off-wake').value = off.wake_minutes ?? 5;
+  const actions = [['none', 'Nothing'], ['next', 'Next app'], ['display', 'Display on/off'],
+    ['brightness', 'Brighter (cycles)'], ...apps.map(a => ['show:' + a, 'Show ' + a])];
+  const btn = cfg.button || {};
+  $('btn-on').checked = !!btn.enabled;
+  [['btn-tap', btn.tap ?? 'next'], ['btn-double', btn.double_tap ?? 'none'], ['btn-hold', btn.hold ?? 'display']]
+    .forEach(([id, value]) => {
+      $(id).innerHTML = actions.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join('');
+      $(id).value = value;
+    });
   $('tz').value = cfg.timezone || '';
   render();
+}
+// Config times are "HH:MM"; older configs store whole hours as numbers.
+function hhmm(v, def) {
+  if (typeof v === 'number') return String(v).padStart(2, '0') + ':00';
+  return typeof v === 'string' && /^\d\d:\d\d$/.test(v) ? v : def;
 }
 function esc(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function render() {
@@ -164,7 +204,9 @@ function removeItem(i) { collect(); cfg.rotation.splice(i, 1); render(); }
 function addItem() { collect(); const app = $('add-app').value; cfg.rotation.push({app, dwell: 10, enabled: true, config: structuredClone(TEMPLATES[app] || {})}); render(); }
 function collect() {
   cfg.rotation.forEach((it, i) => { it.config = JSON.parse($('c' + i).value || '{}'); });
-  cfg.brightness = {day: +$('b-day').value, night: +$('b-night').value, night_start: +$('b-start').value, night_end: +$('b-end').value};
+  cfg.brightness = {day: +$('b-day').value, night: +$('b-night').value, night_start: $('b-start').value, night_end: $('b-end').value};
+  cfg.display_off = {enabled: $('off-on').checked, start: $('off-start').value, end: $('off-end').value, wake_minutes: +$('off-wake').value};
+  cfg.button = {enabled: $('btn-on').checked, tap: $('btn-tap').value, double_tap: $('btn-double').value, hold: $('btn-hold').value};
   if ($('tz').value) cfg.timezone = $('tz').value;
 }
 async function save() {
